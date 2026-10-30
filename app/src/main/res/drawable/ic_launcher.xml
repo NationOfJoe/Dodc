@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A castle keep with a pennant, in the game's retro palette. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path android:fillColor="#40318D" android:pathData="M0,0h48v48h-48z" />
+    <path android:fillColor="#55A049" android:pathData="M0,38h48v10h-48z" />
+    <path android:fillColor="#9F9F9F" android:pathData="M10,38V18h4v-3h3v3h3v-3h3v3h3v-3h3v3h3v-3h3v3h3v20h-9v-8a4,4 0,0 0,-8 0v8z" />
+    <path android:fillColor="#505050" android:pathData="M16,22h3v4h-3zM29,22h3v4h-3z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M23.5,6h1v9h-1z" />
+    <path android:fillColor="#B86962" android:pathData="M24.5,6l7,2.5l-7,2.5z" />
+</vector>
