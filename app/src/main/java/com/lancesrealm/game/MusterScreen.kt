@@ -1,11 +1,14 @@
 package com.lancesrealm.game
 
 import android.graphics.Paint
+import com.lancesrealm.core.Music
 import com.lancesrealm.core.Prices
+import com.lancesrealm.core.Sfx
 
 /** Hire troops and move them between the field host and the Highmere garrison. */
 class MusterScreen(view: GameView) : Screen(view) {
     private var note = ""
+    private val transfers = mutableListOf<Button>()
 
     init {
         val c1 = 40f
@@ -13,10 +16,10 @@ class MusterScreen(view: GameView) : Screen(view) {
         button(c1, 92f, 190f, 20f, "Hire 10 men (${Prices.SOLDIER * 10}g)", Palette.BROWN) { buy(soldiers = 10) }
         button(c1, 118f, 190f, 20f, "Hire a knight (${Prices.KNIGHT}g)", Palette.BROWN) { buy(knights = 1) }
         button(c1, 144f, 190f, 20f, "Build a catapult (${Prices.CATAPULT}g)", Palette.BROWN) { buy(catapults = 1) }
-        button(c2, 92f, 190f, 20f, "10 men to keep", Palette.BLUE) { move(10, 0) }
-        button(c2, 118f, 190f, 20f, "10 men to host", Palette.BLUE) { move(-10, 0) }
-        button(c2, 144f, 190f, 20f, "Knight to keep", Palette.BLUE) { move(0, 1) }
-        button(c2, 170f, 190f, 20f, "Knight to host", Palette.BLUE) { move(0, -1) }
+        transfers += button(c2, 92f, 190f, 20f, "10 men to keep", Palette.BLUE) { move(10, 0) }
+        transfers += button(c2, 118f, 190f, 20f, "10 men to host", Palette.BLUE) { move(-10, 0) }
+        transfers += button(c2, 144f, 190f, 20f, "Knight to keep", Palette.BLUE) { move(0, 1) }
+        transfers += button(c2, 170f, 190f, 20f, "Knight to host", Palette.BLUE) { move(0, -1) }
         button(180f, 236f, 120f, 22f, "Done", Palette.GREEN) { done() }
     }
 
@@ -29,6 +32,11 @@ class MusterScreen(view: GameView) : Screen(view) {
 
     private fun buy(soldiers: Int = 0, knights: Int = 0, catapults: Int = 0) {
         note = if (game.buy(soldiers, knights, catapults)) "" else "Your treasury cannot bear it."
+        if (note.isEmpty()) view.audio.sfx(Sfx.CLICK)
+    }
+
+    override fun update(dt: Float) {
+        transfers.forEach { it.visible = game.armyAtHome }
     }
 
     private fun move(soldiers: Int, knights: Int) {
@@ -51,6 +59,13 @@ class MusterScreen(view: GameView) : Screen(view) {
             40f, 204f, 400f, 7.5f, Palette.LIGHT_GREY,
         )
         if (note.isNotEmpty()) g.text(note, 135f, 186f, 8f, Palette.LIGHT_RED, Paint.Align.CENTER)
+        if (!game.armyAtHome) {
+            g.paragraph(
+                "Your host is camped at ${game.territories[game.armyAt].name}. New recruits wait in the garrison " +
+                    "until it returns to Highmere.",
+                250f, 104f, 190f, 8.5f, Palette.YELLOW,
+            )
+        }
     }
 }
 
@@ -75,6 +90,10 @@ class TournamentScreen(view: GameView) : Screen(view) {
     }
 
     override fun onBack(): Boolean { view.show(MapScreen(view)); return true }
+
+    override fun onShow() {
+        view.audio.music(Music.JOUST)
+    }
 
     override fun update(dt: Float) {
         rivalButtons.forEach { (id, b) -> b.color = if (id == rivalId) Palette.lord(id) else Palette.DARK_GREY }

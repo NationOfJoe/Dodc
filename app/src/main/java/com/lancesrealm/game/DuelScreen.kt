@@ -3,6 +3,10 @@ package com.lancesrealm.game
 import android.graphics.Paint
 import com.lancesrealm.core.Duel
 import com.lancesrealm.core.Height
+import com.lancesrealm.core.Music
+import com.lancesrealm.core.Sfx
+import com.lancesrealm.core.Story
+import com.lancesrealm.core.WorldMap
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -11,11 +15,16 @@ import kotlin.math.sin
  * right half strikes; the upper half is high, the lower half low.
  */
 class DuelScreen(view: GameView, private val lordId: Int) : Screen(view) {
-    private val duel = Duel(game.hero.swordplay, game.raidGuards(lordId))
+    private val rooms = game.raidRooms(lordId)
+    private val rescue = game.isRescue(lordId)
+    private val duel = Duel(game.hero.swordplay, rooms.map { it.guards })
+    private var intro = 1.6f
+    private var lastMessageTime = 0f
     private val guardColor = Palette.lord(lordId)
     private val continueButton = button(180f, 236f, 120f, 22f, "Continue", Palette.GREEN) {
         val news = game.concludeRaid(lordId, duel.playerWon)
-        view.show(ChronicleScreen(view, if (duel.playerWon) "A Daring Raid" else "Caught!", listOf(news)))
+        val title = if (duel.playerWon) (if (rescue) "A Daring Rescue" else "A Daring Raid") else "Caught!"
+        view.show(ChronicleScreen(view, title, listOf(news)))
     }
     private var finishDelay = 0f
 
@@ -25,24 +34,104 @@ class DuelScreen(view: GameView, private val lordId: Int) : Screen(view) {
 
     override fun onBack(): Boolean = true
 
+    override fun onShow() {
+        view.audio.music(Music.RAID)
+    }
+
     override fun touchDown(x: Float, y: Float) {
-        if (duel.isOver) return
+        if (duel.isOver || intro > 0f) return
         val h = if (y < ZONE_SPLIT) Height.HIGH else Height.LOW
         if (x < Gfx.W / 2) duel.block(h) else duel.attack(h)
     }
 
     override fun update(dt: Float) {
+        if (intro > 0f) { intro -= dt; return }
+        val wasOver = duel.isOver
         duel.update(dt)
+        if (duel.messageTime < lastMessageTime && duel.message.isNotEmpty()) soundFor(duel.message)
+        lastMessageTime = duel.messageTime
+        if (duel.isOver && !wasOver) view.audio.music(if (duel.playerWon) Music.VICTORY else Music.DEFEAT)
         if (duel.isOver) finishDelay += dt
         continueButton.visible = duel.isOver && finishDelay > 1f
     }
 
+    private fun soundFor(message: String) {
+        val m = message.lowercase()
+        view.audio.sfx(
+            when {
+                "parried" in m || "blocked" in m -> Sfx.CLASH
+                "wounded" in m || "you fall" in m -> Sfx.GLOOM
+                else -> Sfx.HIT
+            }
+        )
+    }
+
     override fun draw(g: Gfx) {
-        // Torchlit hall.
-        g.clear(Palette.darker(Palette.DARK_GREY, 0.6f))
+        drawRoom(g, duel.roomIndex)
+        drawPlayer(g)
+        drawGuard(g)
+        drawHud(g)
+        val card = when {
+            intro > 0f -> intro / 1.6f
+            duel.transition > 0f -> duel.transition / 2.2f
+            else -> 0f
+        }
+        if (card > 0f) {
+            val a = (minOf(card, 1f - card) * 6f).coerceIn(0f, 1f)
+            g.rect(0f, 0f, Gfx.W, Gfx.H, Palette.withAlpha(Palette.BLACK, (230 * a).toInt()))
+            g.text(rooms[duel.roomIndex].name, Gfx.W / 2, 130f, 22f, Palette.withAlpha(Palette.YELLOW, (255 * a).toInt()), Paint.Align.CENTER)
+            g.text("Room ${duel.roomIndex + 1} of ${duel.roomCount}", Gfx.W / 2, 148f, 9f, Palette.withAlpha(Palette.LIGHT_GREY, (255 * a).toInt()), Paint.Align.CENTER)
+        }
+    }
+
+    /** Each chamber of the castle has its own look; the last is the treasury or the prison tower. */
+    private fun drawRoom(g: Gfx, room: Int) {
+        val stone = when (room) {
+            0 -> Palette.GREY
+            1 -> Palette.darker(Palette.DARK_GREY, 0.6f)
+            else -> if (rescue) Palette.darker(Palette.BLUE, 0.5f) else Palette.darker(Palette.BROWN, 0.6f)
+        }
+        g.clear(stone)
         for (row in 0 until 9) for (col in 0 until 13) {
             val off = if (row % 2 == 0) 0f else 20f
-            g.frame(col * 40f - off, row * 22f, 40f, 22f, Palette.darker(Palette.DARK_GREY, 0.8f))
+            g.frame(col * 40f - off, row * 22f, 40f, 22f, Palette.darker(stone, 0.75f))
+        }
+        when (room) {
+            0 -> {
+                // Gate arch with the portcullis half raised.
+                g.rect(170f, 40f, 140f, 200f, Palette.BLACK)
+                g.oval(170f, 0f, 140f, 90f, Palette.BLACK)
+                for (i in 0 until 8) g.line(178f + i * 18f, 10f, 178f + i * 18f, 110f, Palette.DARK_GREY, 3f)
+                for (j in 0 until 5) g.line(172f, 20f + j * 22f, 308f, 20f + j * 22f, Palette.DARK_GREY, 3f)
+                g.rect(176f, 160f, 128f, 80f, Palette.darker(Palette.BLUE, 0.4f))
+                for (i in 0 until 12) g.rect(180f + WorldMap.hash(i, 5) * 120f, 165f + WorldMap.hash(i, 6) * 30f, 1.2f, 1.2f, Palette.WHITE)
+            }
+            1 -> {
+                for (bx in listOf(150f, 330f)) {
+                    g.poly(Palette.lord(lordId), bx - 16f, 20f, bx + 16f, 20f, bx + 16f, 110f, bx, 96f, bx - 16f, 110f)
+                }
+                g.rect(30f, 200f, 420f, 8f, Palette.BROWN)
+                g.rect(40f, 208f, 6f, 28f, Palette.BROWN)
+                g.rect(434f, 208f, 6f, 28f, Palette.BROWN)
+            }
+            else -> if (rescue) {
+                // Winding stair up to the cell where the hostage is kept.
+                for (i in 0 until 7) g.rect(360f + i * 6f, 230f - i * 24f, 120f - i * 6f, 8f, Palette.GREY)
+                g.rect(400f, 30f, 60f, 50f, Palette.BLACK)
+                for (i in 0 until 4) g.line(408f + i * 14f, 30f, 408f + i * 14f, 80f, Palette.LIGHT_GREY, 2f)
+                if (duel.playerWon) {
+                    g.text("${Story.SIBLING}!", 430f, 24f, 10f, Palette.YELLOW, Paint.Align.CENTER, shadow = true)
+                }
+                g.circle(430f, 52f, 6f, Palette.LIGHT_RED)
+                g.rect(424f, 58f, 12f, 20f, Palette.GREEN)
+            } else {
+                for (i in 0 until 4) {
+                    val cx = 40f + i * 110f
+                    g.rect(cx, 196f, 50f, 36f, Palette.BROWN)
+                    g.rect(cx, 196f, 50f, 6f, Palette.ORANGE)
+                    for (k in 0 until 5) g.circle(cx + 8f + k * 8f, 194f, 4f, Palette.YELLOW)
+                }
+            }
         }
         for (tx in listOf(90f, 390f)) {
             g.rect(tx - 2f, 70f, 4f, 16f, Palette.BROWN)
@@ -52,10 +141,6 @@ class DuelScreen(view: GameView, private val lordId: Int) : Screen(view) {
         }
         g.rect(0f, GROUND, Gfx.W, Gfx.H - GROUND, Palette.BROWN)
         g.rect(0f, GROUND, Gfx.W, 3f, Palette.darker(Palette.BROWN, 0.6f))
-
-        drawPlayer(g)
-        drawGuard(g)
-        drawHud(g)
     }
 
     private fun drawPlayer(g: Gfx) {
@@ -82,7 +167,7 @@ class DuelScreen(view: GameView, private val lordId: Int) : Screen(view) {
         }
         val down = duel.enemyState == Duel.EnemyState.DOWN || duel.playerWon
         val color = if (duel.enemyState == Duel.EnemyState.HURT && (g.time * 20).toInt() % 2 == 0) Palette.WHITE else guardColor
-        if (!(duel.playerWon && duel.guardIndex >= duel.guardCount)) {
+        if (!duel.playerWon && duel.transition <= 0f) {
             fighter(g, x, -1, color, angle, handY, lean, if (down) 0.5f else 1f)
         }
         if (duel.enemyState == Duel.EnemyState.WINDUP) {
@@ -125,7 +210,7 @@ class DuelScreen(view: GameView, private val lordId: Int) : Screen(view) {
         g.panel(4f, 4f, 170f, 30f)
         g.text("You", 10f, 18f, 8f, Palette.YELLOW)
         for (i in 0 until duel.playerMaxHp) g.rect(34f + i * 12f, 11f, 10f, 8f, if (i < duel.playerHp) Palette.LIGHT_RED else Palette.DARK_GREY)
-        g.text("Guard ${minOf(duel.guardIndex + 1, duel.guardCount)} of ${duel.guardCount}", 10f, 30f, 7f, Palette.LIGHT_GREY)
+        g.text("${rooms[duel.roomIndex].name}  -  guard ${minOf(duel.guardIndex + 1, duel.guardCount)}/${duel.guardCount}", 10f, 30f, 7f, Palette.LIGHT_GREY)
         g.panel(Gfx.W - 124f, 4f, 120f, 30f)
         g.text("Guard", Gfx.W - 118f, 18f, 8f, Palette.YELLOW)
         for (i in 0 until duel.guardMaxHp) g.rect(Gfx.W - 80f + i * 14f, 11f, 12f, 8f, if (i < duel.guardHp) guardColor else Palette.DARK_GREY)
@@ -134,7 +219,10 @@ class DuelScreen(view: GameView, private val lordId: Int) : Screen(view) {
             g.text(duel.message, Gfx.W / 2, 58f, 12f, Palette.YELLOW, Paint.Align.CENTER, shadow = true)
         }
         when {
-            duel.playerWon -> g.text("THE TREASURY IS YOURS!", Gfx.W / 2, 120f, 18f, Palette.YELLOW, Paint.Align.CENTER, shadow = true)
+            duel.playerWon -> g.text(
+                if (rescue) "${Story.SIBLING.uppercase()} IS FREE!" else "THE TREASURY IS YOURS!",
+                Gfx.W / 2, 120f, 18f, Palette.YELLOW, Paint.Align.CENTER, shadow = true,
+            )
             duel.playerLost -> g.text("OVERPOWERED!", Gfx.W / 2, 120f, 18f, Palette.LIGHT_RED, Paint.Align.CENTER, shadow = true)
             else -> {
                 val c = Palette.withAlpha(Palette.WHITE, 110)

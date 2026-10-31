@@ -10,9 +10,13 @@ enum class Height { HIGH, LOW }
  */
 class Duel(
     swordplay: Int,
-    private val guardSkills: List<Int>,
+    /** Guard skills grouped by the room they defend; the raider fights through rooms in order. */
+    private val rooms: List<List<Int>>,
     private val rng: Random = Random.Default,
 ) {
+    private val guardSkills = rooms.flatten()
+    private val roomOf = rooms.flatMapIndexed { r, guards -> List(guards.size) { r } }
+
     enum class EnemyState { GUARD, WINDUP, RECOVER, STAGGER, HURT, DOWN }
 
     val playerMaxHp = 3 + swordplay
@@ -53,6 +57,12 @@ class Duel(
     var messageTime = 0f
         private set
 
+    val roomCount: Int get() = rooms.size
+    val roomIndex: Int get() = roomOf[guardIndex.coerceAtMost(roomOf.lastIndex)]
+    /** Seconds left of the pause between rooms; nothing happens while it runs. */
+    var transition = 0f
+        private set
+
     val playerWon: Boolean get() = guardIndex >= guardSkills.size
     val playerLost: Boolean get() = playerHp <= 0
     val isOver: Boolean get() = playerWon || playerLost
@@ -66,6 +76,11 @@ class Duel(
 
     fun update(dt: Float) {
         if (isOver) return
+        if (transition > 0f) {
+            transition = (transition - dt).coerceAtLeast(0f)
+            if (transition == 0f) enterGuard()
+            return
+        }
         attackCooldown = (attackCooldown - dt).coerceAtLeast(0f)
         blockCooldown = (blockCooldown - dt).coerceAtLeast(0f)
         blockTime = (blockTime - dt).coerceAtLeast(0f)
@@ -89,15 +104,22 @@ class Duel(
                 guardIndex++
                 if (!playerWon) {
                     guardHp = GUARD_HP
-                    say("Another guard steps forward!")
-                    enterGuard()
+                    if (roomOf[guardIndex] != roomOf[guardIndex - 1]) {
+                        // Catch your breath on the stair before the next room.
+                        playerHp = (playerHp + 1).coerceAtMost(playerMaxHp)
+                        transition = ROOM_PAUSE
+                        say("")
+                    } else {
+                        say("Another guard steps forward!")
+                        enterGuard()
+                    }
                 }
             }
         }
     }
 
     fun attack(height: Height) {
-        if (isOver || attackCooldown > 0f || enemyState == EnemyState.DOWN) return
+        if (isOver || transition > 0f || attackCooldown > 0f || enemyState == EnemyState.DOWN) return
         attackCooldown = attackCooldownTime
         swingTime = SWING_TIME
         swingHeight = height
@@ -117,7 +139,7 @@ class Duel(
     }
 
     fun block(height: Height) {
-        if (isOver || blockCooldown > 0f) return
+        if (isOver || transition > 0f || blockCooldown > 0f) return
         blockCooldown = 0.45f
         blockTime = blockWindow
         blockHeight = height
@@ -166,5 +188,6 @@ class Duel(
     companion object {
         const val GUARD_HP = 3
         const val SWING_TIME = 0.22f
+        const val ROOM_PAUSE = 2.2f
     }
 }

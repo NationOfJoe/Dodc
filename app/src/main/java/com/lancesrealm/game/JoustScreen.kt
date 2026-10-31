@@ -2,7 +2,9 @@ package com.lancesrealm.game
 
 import android.graphics.Paint
 import com.lancesrealm.core.Joust
+import com.lancesrealm.core.Music
 import com.lancesrealm.core.PassResult
+import com.lancesrealm.core.Sfx
 import kotlin.math.sin
 
 /** The lists, seen down your own lance. Drag to steer the tip onto the rival's shield. */
@@ -24,7 +26,19 @@ class JoustScreen(view: GameView, private val rivalId: Int, private val forLand:
 
     override fun onBack(): Boolean = true
 
-    override fun touchDown(x: Float, y: Float) { lastX = x; lastY = y }
+    private var lastPhase = joust.phase
+
+    override fun onShow() {
+        view.audio.music(Music.JOUST)
+    }
+
+    override fun touchDown(x: Float, y: Float) {
+        lastX = x; lastY = y
+        if (joust.phase == Joust.Phase.COUCH && !joust.couched) {
+            joust.tap()
+            view.audio.sfx(Sfx.COUCH)
+        }
+    }
 
     override fun touchMove(x: Float, y: Float) {
         aimX = (aimX + (x - lastX) / SCALE * 1.2f).coerceIn(-1f, 1f)
@@ -33,9 +47,21 @@ class JoustScreen(view: GameView, private val rivalId: Int, private val forLand:
     }
 
     override fun update(dt: Float) {
-        if (joust.phase == Joust.Phase.READY) { aimX = 0f; aimY = 0.6f }
+        if (joust.phase == Joust.Phase.READY || joust.phase == Joust.Phase.COUCH) { aimX = 0f; aimY = 0.6f }
         joust.aim(aimX, aimY)
         joust.update(dt)
+        if (joust.phase != lastPhase) {
+            when (joust.phase) {
+                Joust.Phase.RIDING -> view.audio.sfx(Sfx.LAUNCH)
+                Joust.Phase.RESULT -> view.audio.sfx(
+                    if (joust.lastPlayerResult != PassResult.MISSED || joust.lastRivalResult != PassResult.MISSED) Sfx.CLASH else Sfx.CLICK
+                )
+                Joust.Phase.FINISHED -> view.audio.sfx(if (joust.playerWon) Sfx.CHEER else Sfx.GLOOM)
+                Joust.Phase.READY -> view.audio.sfx(Sfx.FANFARE)
+                else -> Unit
+            }
+            lastPhase = joust.phase
+        }
         continueButton.visible = joust.phase == Joust.Phase.FINISHED
     }
 
@@ -79,7 +105,7 @@ class JoustScreen(view: GameView, private val rivalId: Int, private val forLand:
         val sx = CX + joust.shieldX * SCALE
         val sy = CY + joust.shieldY * SCALE
         val bob = if (joust.phase == Joust.Phase.RIDING) sin(g.time * 14f) * 2f * s else 0f
-        val unhorsed = joust.phase != Joust.Phase.RIDING && joust.phase != Joust.Phase.READY &&
+        val unhorsed = (joust.phase == Joust.Phase.RESULT || joust.phase == Joust.Phase.FINISHED) &&
             joust.lastPlayerResult == PassResult.UNHORSED
         if (unhorsed) {
             g.text("CRASH!", sx, sy, 24f, Palette.YELLOW, Paint.Align.CENTER, shadow = true)
@@ -127,8 +153,12 @@ class JoustScreen(view: GameView, private val rivalId: Int, private val forLand:
         g.text("You: ${joust.playerPoints}", 12f, 22f, 10f, Palette.YELLOW)
         g.text(game.rival(rivalId).displayName.substringAfter(' ') + ": ${joust.rivalPoints}", 70f, 22f, 10f, Palette.YELLOW)
         g.text("Pass ${joust.pass}", Gfx.W - 10f, 22f, 12f, Palette.WHITE, Paint.Align.RIGHT, shadow = true)
+        if (joust.phase == Joust.Phase.RIDING && joust.couch < 0.5f) {
+            g.text("Your lance wavers!", Gfx.W - 10f, 36f, 8f, Palette.LIGHT_RED, Paint.Align.RIGHT, shadow = true)
+        }
         when (joust.phase) {
-            Joust.Phase.READY -> g.text("Pass ${joust.pass} - lower your lance!", Gfx.W / 2, 140f, 16f, Palette.YELLOW, Paint.Align.CENTER, shadow = true)
+            Joust.Phase.READY -> g.text("Pass ${joust.pass}", Gfx.W / 2, 140f, 18f, Palette.YELLOW, Paint.Align.CENTER, shadow = true)
+            Joust.Phase.COUCH -> drawCouchMeter(g)
             Joust.Phase.RIDING -> if (joust.pass == 1) {
                 g.text("Drag to steer your lance onto the shield. Gold boss unhorses!", Gfx.W / 2, 262f, 8f, Palette.WHITE, Paint.Align.CENTER, shadow = true)
             }
@@ -141,6 +171,30 @@ class JoustScreen(view: GameView, private val rivalId: Int, private val forLand:
                 val text = if (joust.playerWon) "YOU WIN THE JOUST!" else "YOU ARE BEATEN"
                 g.text(text, Gfx.W / 2, 140f, 22f, if (joust.playerWon) Palette.YELLOW else Palette.LIGHT_RED, Paint.Align.CENTER, shadow = true)
             }
+        }
+    }
+
+    /** The swinging meter: tap while the needle is in the gold band to couch the lance well. */
+    private fun drawCouchMeter(g: Gfx) {
+        val x = 140f
+        val y = 120f
+        val w = 200f
+        g.panel(x - 10f, y - 26f, w + 20f, 58f)
+        g.text("TAP in the gold to lower your lance!", Gfx.W / 2, y - 12f, 8.5f, Palette.WHITE, Paint.Align.CENTER)
+        g.rect(x, y, w, 14f, Palette.DARK_GREY)
+        val band = joust.couchBand * w
+        g.rect(x + w / 2 - band / 2 - 20f, y, 20f, 14f, Palette.ORANGE)
+        g.rect(x + w / 2 + band / 2, y, 20f, 14f, Palette.ORANGE)
+        g.rect(x + w / 2 - band / 2, y, band, 14f, Palette.YELLOW)
+        val nx = x + joust.meter * w
+        g.rect(nx - 1.5f, y - 4f, 3f, 22f, Palette.WHITE)
+        if (joust.couched) {
+            val (word, c) = when {
+                joust.couch >= 1f -> "PERFECT!" to Palette.YELLOW
+                joust.couch >= 0.5f -> "Steady" to Palette.LIGHT_GREEN
+                else -> "Clumsy..." to Palette.LIGHT_RED
+            }
+            g.text(word, Gfx.W / 2, y + 27f, 9f, c, Paint.Align.CENTER, shadow = true)
         }
     }
 

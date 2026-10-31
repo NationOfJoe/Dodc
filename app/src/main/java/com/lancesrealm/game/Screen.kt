@@ -38,6 +38,8 @@ abstract class Screen(protected val view: GameView) {
         color: Int = Palette.RED, textSize: Float = 10f, onClick: () -> Unit,
     ): Button = Button(x, y, w, h, label, color, textSize, onClick = onClick).also { buttons += it }
 
+    fun addButton(b: Button): Button = b.also { buttons += it }
+
     fun drawButtons(g: Gfx) {
         buttons.forEach { if (it.visible) g.button(it) }
     }

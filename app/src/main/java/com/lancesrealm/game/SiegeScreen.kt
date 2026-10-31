@@ -2,6 +2,8 @@ package com.lancesrealm.game
 
 import android.graphics.Paint
 import com.lancesrealm.core.AttackPlan
+import com.lancesrealm.core.Music
+import com.lancesrealm.core.Sfx
 import com.lancesrealm.core.Siege
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -10,7 +12,12 @@ import kotlin.math.sin
 
 /** Bombard a rival castle with your catapults, then storm it. Drag back and release to fire. */
 class SiegeScreen(view: GameView, private val plan: AttackPlan) : Screen(view) {
-    private val siege = Siege(game.player.army.catapults * 2)
+    private val siege = Siege(game.player.army.catapults * 2, plan.wallHp)
+    private var seenImpacts = 0
+    private var shake = 0f
+
+    /** Debris thrown up by impacts: x, y, vx, vy, life per particle. */
+    private val debris = ArrayList<FloatArray>()
     private var dragging = false
     private var startX = 0f
     private var startY = 0f
@@ -24,8 +31,27 @@ class SiegeScreen(view: GameView, private val plan: AttackPlan) : Screen(view) {
         view.show(BattleScreen(view, plan, siege.fortification, siege.garrisonLoss))
     }
 
+    override fun onShow() {
+        view.audio.music(Music.BATTLE)
+    }
+
     override fun update(dt: Float) {
         siege.update(dt)
+        if (siege.impacts != seenImpacts) {
+            seenImpacts = siege.impacts
+            view.audio.sfx(if (siege.lastHitWall) Sfx.IMPACT else Sfx.HIT)
+            shake = if (siege.lastHitWall) 0.4f else 0.15f
+            repeat(if (siege.lastHitWall) 16 else 6) {
+                val a = Math.random().toFloat() * Math.PI.toFloat()
+                val v = 40f + Math.random().toFloat() * 80f
+                debris += floatArrayOf(sx(siege.impactX), sy(siege.impactY), -cos(a) * v, -sin(a) * v, 1f)
+            }
+        }
+        shake = (shake - dt).coerceAtLeast(0f)
+        debris.forEach { p ->
+            p[0] += p[2] * dt; p[1] += p[3] * dt; p[3] += 200f * dt; p[4] -= dt
+        }
+        debris.removeAll { it[4] <= 0f || it[1] > GROUND }
         storm.label = if (siege.phase == Siege.Phase.FINISHED) "Storm the castle!" else "Storm now"
         storm.color = if (siege.phase == Siege.Phase.FINISHED) Palette.GREEN else Palette.RED
     }
@@ -48,13 +74,17 @@ class SiegeScreen(view: GameView, private val plan: AttackPlan) : Screen(view) {
         if (!dragging) return
         dragging = false
         touchMove(x, y)
-        if (power > 0.05f) siege.fire(angle, power)
+        if (power > 0.05f) {
+            siege.fire(angle, power)
+            view.audio.sfx(Sfx.LAUNCH)
+        }
     }
 
     private fun sx(wx: Float) = 20f + wx * K
     private fun sy(wy: Float) = GROUND - wy * K
 
     override fun draw(g: Gfx) {
+        if (shake > 0f) g.canvas.translate(sin(g.time * 80f) * shake * 10f, cos(g.time * 70f) * shake * 6f)
         drawLandscape(g, GROUND)
         // Courtyard and keep beyond the wall.
         g.rect(sx(Siege.WALL_END), GROUND - 4f, sx(Siege.KEEP_END) - sx(Siege.WALL_END), 4f, Palette.BROWN)
@@ -75,9 +105,18 @@ class SiegeScreen(view: GameView, private val plan: AttackPlan) : Screen(view) {
             val y = sy(siege.blockBottom(r) + Siege.BLOCK_H)
             val w = Siege.BLOCK_W * K
             val h = Siege.BLOCK_H * K
-            g.rect(x, y, w, h, Palette.LIGHT_GREY)
+            val hp = siege.blockHp(c, r)
+            g.rect(x, y, w, h, if (hp == plan.wallHp) Palette.LIGHT_GREY else Palette.GREY)
             g.frame(x, y, w, h, Palette.DARK_GREY)
+            // Cracks multiply as a block is battered.
+            val cracks = plan.wallHp - hp
+            for (k in 0 until cracks) {
+                val ox = x + 2f + k * 3f
+                g.line(ox, y + 1f, ox + 2f, y + h / 2, Palette.BLACK, 0.8f)
+                g.line(ox + 2f, y + h / 2, ox, y + h - 1f, Palette.BLACK, 0.8f)
+            }
         }
+        debris.forEach { p -> g.rect(p[0] - 1.5f, p[1] - 1.5f, 3f, 3f, Palette.withAlpha(Palette.LIGHT_GREY, (255 * p[4]).toInt().coerceIn(0, 255))) }
 
         drawCatapult(g)
 
@@ -127,7 +166,7 @@ class SiegeScreen(view: GameView, private val plan: AttackPlan) : Screen(view) {
     private fun drawHud(g: Gfx) {
         g.panel(4f, 4f, 230f, 44f)
         g.text("Siege of ${plan.target.name}", 10f, 17f, 9f, Palette.YELLOW)
-        g.text("Stones left: ${siege.shotsLeft}   Wall: ${(100 * (1 - siege.breach)).toInt()}%", 10f, 29f, 8f, Palette.WHITE)
+        g.text("Stones left: ${siege.shotsLeft}   Wall: ${(100 * (1 - siege.breach)).toInt()}%   Walls: " + listOf("", "plain", "stout", "mighty")[plan.wallHp.coerceIn(1, 3)], 10f, 29f, 8f, Palette.WHITE)
         val windDir = if (siege.wind >= 0) ">" else "<"
         val windStrength = (kotlin.math.abs(siege.wind) * 1.5f).toInt()
         g.text("Wind: " + if (windStrength == 0) "calm" else windDir.repeat(windStrength), 10f, 41f, 8f, Palette.CYAN)

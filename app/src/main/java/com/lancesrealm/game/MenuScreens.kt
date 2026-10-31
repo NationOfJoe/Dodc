@@ -4,7 +4,15 @@ import android.graphics.Paint
 import com.lancesrealm.core.GameOutcome
 import com.lancesrealm.core.GameState
 import com.lancesrealm.core.Hero
+import com.lancesrealm.core.Music
+import com.lancesrealm.core.Story
 import kotlin.math.sin
+
+fun soundLabel(view: GameView) = if (view.audio.muted) "Sound off" else "Sound on"
+
+/** A small toggle for music and effects, shared by the title and the map. */
+fun Screen.soundButton(view: GameView, x: Float, y: Float): Button =
+    addButton(Button(x, y, 72f, 16f, soundLabel(view), Palette.DARK_GREY, 8f) { view.audio.toggleMute() })
 
 /** Shared backdrop: dusk sky, hills and a distant castle. */
 fun drawLandscape(g: Gfx, horizon: Float = 190f) {
@@ -27,12 +35,19 @@ class TitleScreen(view: GameView) : Screen(view) {
         if (view.loadCampaign()) view.show(MapScreen(view))
     }
 
+    private val sound = soundButton(view, Gfx.W - 78f, 6f)
+
     init {
         button(170f, 226f, 140f, 22f, "New Campaign") { view.show(HeroSelectScreen(view)) }
     }
 
     override fun onShow() {
         cont.visible = view.hasSave
+        view.audio.music(Music.TITLE)
+    }
+
+    override fun update(dt: Float) {
+        sound.label = soundLabel(view)
     }
 
     override fun draw(g: Gfx) {
@@ -52,7 +67,7 @@ class HeroSelectScreen(view: GameView) : Screen(view) {
         Hero.entries.forEachIndexed { i, hero ->
             button(16f + i * 116f, 212f, 104f, 22f, "Ride forth", Palette.RED, 10f) {
                 view.startCampaign(GameState(hero))
-                view.show(ChronicleScreen(view, "The Realm Divided", listOf(INTRO.format(hero.displayName))))
+                view.show(CutsceneScreen(view, Story.intro(hero), Music.TITLE) { view.show(MapScreen(view)) })
             }
         }
         button(8f, 246f, 70f, 18f, "Back", Palette.DARK_GREY, 9f) { view.show(TitleScreen(view)) }
@@ -79,14 +94,6 @@ class HeroSelectScreen(view: GameView) : Screen(view) {
         g.text(label, x, y, 8f, Palette.CYAN)
         for (i in 0 until 5) g.rect(x + 40f + i * 10f, y - 7f, 8f, 7f, if (i < v) Palette.YELLOW else Palette.DARK_GREY)
     }
-
-    companion object {
-        private const val INTRO =
-            "The old king of Valdria is dead and left no heir. Three great lords now reach for the crown: " +
-                "Baron Vask in the north-east, Duke Morlan in the north-west and Countess Ysolde in the south.\n" +
-                "You are %s, keeper of Highmere. Win land by the sword, gold in the lists and glory by daring raids. " +
-                "Storm the castles of all three rivals and the crown is yours. Lose Highmere and all is lost."
-    }
 }
 
 /** Shows news and then returns to the map (or the end of the game). */
@@ -95,11 +102,7 @@ class ChronicleScreen(view: GameView, private val title: String, private val lin
         button(180f, 236f, 120f, 22f, "Continue", Palette.GREEN) { proceed() }
     }
 
-    private fun proceed() {
-        val outcome = view.game?.outcome
-        view.save()
-        if (outcome != null) view.show(GameOverScreen(view, outcome)) else view.show(MapScreen(view))
-    }
+    private fun proceed() = view.continueStory()
 
     override fun onBack(): Boolean { proceed(); return true }
 

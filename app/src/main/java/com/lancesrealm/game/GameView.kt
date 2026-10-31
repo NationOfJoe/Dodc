@@ -6,7 +6,10 @@ import android.graphics.Canvas
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
+import com.lancesrealm.core.GameOutcome
 import com.lancesrealm.core.GameState
+import com.lancesrealm.core.Music
+import com.lancesrealm.core.Story
 import kotlin.math.min
 
 /**
@@ -16,6 +19,7 @@ import kotlin.math.min
 class GameView(context: Context) : View(context), Choreographer.FrameCallback {
     private val gfx = Gfx()
     private val prefs = context.getSharedPreferences("lances", Context.MODE_PRIVATE)
+    val audio = Audio(context)
     private var lastFrameNanos = 0L
     private var running = false
 
@@ -65,15 +69,40 @@ class GameView(context: Context) : View(context), Choreographer.FrameCallback {
 
     fun handleBack(): Boolean = screen.onBack()
 
+    /**
+     * Continues after any deed or season: plays pending story panels, then the ending if the war
+     * is decided, otherwise returns to the map.
+     */
+    fun continueStory() {
+        val g = game ?: return show(TitleScreen(this))
+        save()
+        if (g.events.isNotEmpty()) {
+            val panels = g.events.toList()
+            g.events.clear()
+            show(CutsceneScreen(this, panels) { continueStory() })
+            return
+        }
+        val outcome = g.outcome
+        if (outcome != null) {
+            val win = outcome == GameOutcome.VICTORY
+            val ending = if (win) Story.victory(g) else Story.defeat(g)
+            show(CutsceneScreen(this, listOf(ending), if (win) Music.VICTORY else Music.DEFEAT) { show(GameOverScreen(this, outcome)) })
+            return
+        }
+        show(MapScreen(this))
+    }
+
     fun resume() {
         if (running) return
         running = true
         lastFrameNanos = 0L
+        audio.resume()
         Choreographer.getInstance().postFrameCallback(this)
     }
 
     fun pause() {
         running = false
+        audio.pause()
         Choreographer.getInstance().removeFrameCallback(this)
         save()
     }

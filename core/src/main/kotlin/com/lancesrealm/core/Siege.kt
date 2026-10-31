@@ -8,15 +8,15 @@ import kotlin.random.Random
  * Catapult bombardment before storming a castle. Knock stones out of the curtain wall to weaken the
  * defence, or lob shot over it to thin the garrison. World units: x to the right, y up, ground at 0.
  */
-class Siege(val shots: Int, private val rng: Random = Random.Default) {
+class Siege(val shots: Int, val wallHp: Int = 1, private val rng: Random = Random.Default) {
     enum class Phase { AIMING, FLYING, FINISHED }
 
     var phase = if (shots > 0) Phase.AIMING else Phase.FINISHED
         private set
     var shotsLeft = shots
         private set
-    /** Wall blocks indexed [col * ROWS + row], row 0 at the ground. */
-    val blocks = BooleanArray(COLS * ROWS) { true }
+    /** Remaining hit points of each wall block, indexed [col * ROWS + row], row 0 at the ground. */
+    val blocks = IntArray(COLS * ROWS) { wallHp }
     var interiorHits = 0
         private set
     var wind = 0f
@@ -36,16 +36,30 @@ class Siege(val shots: Int, private val rng: Random = Random.Default) {
         rollWind()
     }
 
-    val blocksStanding: Int get() = blocks.count { it }
-    val breach: Float get() = 1f - blocksStanding.toFloat() / blocks.size
+    /** Bumped on every impact so the screen can shake and throw debris. */
+    var impacts = 0
+        private set
+    var impactX = 0f
+        private set
+    var impactY = 0f
+        private set
+    var lastHitWall = false
+        private set
+
+    val blocksStanding: Int get() = blocks.count { it > 0 }
+
+    /** Fraction of the wall's total strength battered away; cracked stone counts for something. */
+    val breach: Float get() = 1f - blocks.sum().toFloat() / (blocks.size * wallHp)
 
     /** Defensive multiplier handed to the storming [Battle]. */
-    val fortification: Float get() = 1f + 0.9f * (1f - breach)
+    val fortification: Float get() = 1f + (maxFortification(wallHp) - 1f) * (1f - breach)
 
     /** Fraction of the garrison lost to shot falling inside the walls. */
     val garrisonLoss: Float get() = (interiorHits * 0.07f).coerceAtMost(0.5f)
 
-    fun isBlockStanding(col: Int, row: Int) = blocks[col * ROWS + row]
+    fun isBlockStanding(col: Int, row: Int) = blocks[col * ROWS + row] > 0
+
+    fun blockHp(col: Int, row: Int) = blocks[col * ROWS + row]
 
     fun blockLeft(col: Int) = WALL_X + col * BLOCK_W
     fun blockBottom(row: Int) = row * BLOCK_H
@@ -82,18 +96,22 @@ class Siege(val shots: Int, private val rng: Random = Random.Default) {
     private fun checkImpact(): Boolean {
         val col = ((projX - WALL_X) / BLOCK_W).toInt()
         val row = (projY / BLOCK_H).toInt()
-        if (projX >= WALL_X && col in 0 until COLS && row in 0 until ROWS && blocks[col * ROWS + row]) {
-            blocks[col * ROWS + row] = false
-            // Masonry above or beside may come down too.
+        if (projX >= WALL_X && col in 0 until COLS && row in 0 until ROWS && blocks[col * ROWS + row] > 0) {
+            val i = col * ROWS + row
+            blocks[i]--
+            // Masonry above or beside may be shaken loose too.
             if (rng.nextFloat() < 0.45f) {
                 val r2 = (row + if (rng.nextBoolean()) 1 else -1).coerceIn(0, ROWS - 1)
-                blocks[col * ROWS + r2] = false
+                val j = col * ROWS + r2
+                if (blocks[j] > 0) blocks[j]--
             }
-            endShot("Stones crash from the wall!")
+            impact(true)
+            endShot(if (blocks[i] == 0) "Stones crash from the wall!" else "The wall cracks but holds!")
             return true
         }
         if (projY <= 0f) {
             projY = 0f
+            impact(false)
             if (projX > WALL_END && projX < KEEP_END) {
                 interiorHits++
                 endShot("A hit inside the bailey!")
@@ -103,6 +121,13 @@ class Siege(val shots: Int, private val rng: Random = Random.Default) {
             return true
         }
         return false
+    }
+
+    private fun impact(wall: Boolean) {
+        impacts++
+        impactX = projX
+        impactY = projY
+        lastHitWall = wall
     }
 
     private fun endShot(text: String) {
@@ -136,5 +161,8 @@ class Siege(val shots: Int, private val rng: Random = Random.Default) {
         const val MAX_ANGLE = 75f
 
         fun launchSpeed(power: Float) = 30f + 42f * power.coerceIn(0f, 1f)
+
+        /** Defence of an unbroken wall whose blocks have [wallHp] hit points. */
+        fun maxFortification(wallHp: Int) = 1.6f + 0.15f * wallHp
     }
 }

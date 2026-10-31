@@ -9,17 +9,35 @@ daring raids. Storm all three rival castles to win. If Highmere falls, you lose.
 
 ## How to play
 
-Each **season** you may muster troops freely, then perform **one great deed**:
+Your field army is the blue banner on the map. Each **season** it can **move** two steps through
+your own lands. You can also muster troops; recruits gather at Highmere and join the army only
+while it is home. Then you perform **one great deed**:
 
 | Deed | What happens |
 | --- | --- |
-| **March on** | Attack a territory on your border. You fight the battle round by round, choosing **Charge**, **Hold**, **Flank** or **Retreat**. Hold beats Charge, Charge beats Flank, and Flank beats Hold. |
-| **Besiege** | Marching on a rival's home castle starts a siege. Fire your catapults (two stones each): drag back and release. Knock stones out of the wall to weaken its defence, or lob shots into the bailey to thin the garrison. Then storm it. |
-| **Raid castle** | Sneak into any rival castle and fight its guards one after another. Tap the left half of the screen to block and the right half to strike. Tap high or low to match the guard's attack, which is telegraphed with a `!`. Win and you steal half their treasury. |
-| **Hold a tournament** | Joust against a rival's champion for a purse or for land. Drag to steer your lance onto their shield as they gallop in. Hitting the gold boss unhorses them. |
+| **March on** | Attack a territory next to your army; if you win, the army advances into it. You fight the battle round by round, choosing **Charge**, **Hold**, **Flank** or **Retreat**. Hold beats Charge, Charge beats Flank, and Flank beats Hold. |
+| **Besiege** | Marching on a rival's home castle starts a siege. Fire your catapults (two stones each): drag back and release. Batter the wall to weaken its defence, or lob shots into the bailey to thin the garrison. Then storm it. The more land a rival holds, the stouter their walls and the bigger their garrison. |
+| **Raid castle** | Sneak into any rival castle and fight room by room: the gatehouse, the great hall, then the treasury. Tap the left half of the screen to block and the right half to strike. Tap high or low to match the guard's attack, which is telegraphed with a `!`. Win and you steal half their treasury. |
+| **Hold a tournament** | Joust against a rival's champion for a purse or for land. Before each pass, tap while the swinging meter is in the gold band to lower your lance. A clumsy couch makes it waver. Then drag to steer your lance onto their shield as they gallop in. Hitting the gold boss unhorses them. |
 
 Then **End season**: rivals recruit and campaign, taxes come in, and your troops are paid.
-Your field army rides home to help defend Highmere if a rival besieges it.
+Your army defends whatever land it stands in. It rides home to lift a siege of Highmere only
+if it is no more than one step away.
+
+### The story
+
+Illustrated story panels tell the tale of the war:
+
+- **Your sister Tamsin is taken hostage** at the end of the first year. Raid her captor's
+  castle and fight up the tower stair to free her. Her household knights will then join you.
+- **Rival lords** write gloating letters when they take your land, and sometimes offer a
+  year-long truce, which you can accept or refuse.
+- **Random events**: plague in the camp, blighted or golden harvests, fire at Highmere,
+  mercenaries for hire, and wandering knights who offer their lances.
+- **Rebellion**: lands far from your army may rise up, more often as your realm grows.
+
+The game has an original chiptune score and sound effects, synthesised in code at runtime.
+You can toggle sound on the title screen or the map.
 
 Your progress is saved automatically.
 
@@ -35,11 +53,13 @@ Your progress is saved automatically.
 ## Project layout
 
 ```
-core/   Pure Kotlin game logic: map, campaign rules, rival AI, battle, joust, duel and siege
-        simulations, save format. Unit-tested on the JVM.
+core/   Pure Kotlin game logic: map, campaign rules, rival AI, story events, battle, joust,
+        duel and siege simulations, chiptune synthesiser and score, save format.
+        Unit-tested on the JVM.
 app/    Android app: a single Activity and a custom View that draws every screen with Canvas
-        at a virtual 480x270 resolution, using a 16-colour retro palette. There are no
-        bitmap assets and no AndroidX dependencies.
+        at a virtual 480x270 resolution, using a 16-colour retro palette. Story scenes are
+        drawn in code and audio plays through AudioTrack. There are no bitmap or audio
+        assets and no AndroidX dependencies.
 ```
 
 ## Building
