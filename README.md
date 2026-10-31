@@ -75,3 +75,12 @@ You need JDK 17+ and the Android SDK (API 35).
 Every push runs the **Build** GitHub Actions workflow. It runs the tests, builds the debug
 APK and uploads it as the `lances-of-the-realm-debug-apk` artifact, so you can download
 it from the workflow run and sideload it.
+
+---
+
+## Also in this repository: Hue Hive
+
+[`huehive/`](huehive/README.md) holds **Hue Hive**, an original tile-matching game for
+2 to 4 players. It plays in the browser and on Android, online or against the computer,
+and keeps group and session scoreboards. Its APK builds alongside this one (`./gradlew :huehive:assembleDebug`).
+

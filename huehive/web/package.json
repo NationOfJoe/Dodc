@@ -1,0 +1,13 @@
+{
+  "name": "hue-hive",
+  "version": "1.0.0",
+  "description": "Hue Hive: a tile-matching game on a honeycomb for 2-4 players. Web app and online server.",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=18" }
+}

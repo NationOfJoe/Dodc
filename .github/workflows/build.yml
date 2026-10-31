@@ -18,10 +18,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Test game logic and build APK
-        run: ./gradlew :core:test :app:assembleDebug --stacktrace
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test Hue Hive rules, AI and server
+        working-directory: huehive/web
+        run: npm test
+
+      - name: Test game logic and build APKs
+        run: ./gradlew :core:test :app:assembleDebug :huehive:assembleDebug --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
           name: lances-of-the-realm-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hue-hive-debug-apk
+          path: huehive/android/build/outputs/apk/debug/*.apk
