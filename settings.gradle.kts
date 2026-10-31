@@ -15,5 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "LancesOfTheRealm"
-include(":core", ":app", ":huehive")
-project(":huehive").projectDir = file("huehive/android")
+include(":core", ":app")
